@@ -1,0 +1,59 @@
+name: build-crownlink
+
+# Build CrownLink.snp on a Windows runner (MSVC + Ninja + Python), mirroring the local
+# CMakePresets "x86-release" workflow. Used to produce a CrownLink.snp carrying the
+# cosmo-rollback transport exports (`cl_rollback_*`, ADR-0001 §2.1) without needing a
+# Windows development machine.
+
+on:
+  push:
+    branches: [ master, main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Version.cmake derives the version from the git tag, so the full history/tags
+          # must be present.
+          fetch-depth: 0
+
+      - name: Set up MSVC (x86)
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x86
+
+      - name: Show tools
+        shell: pwsh
+        run: |
+          cmake --version
+          ninja --version
+          python --version
+          where.exe cl.exe
+
+      - name: Configure
+        shell: pwsh
+        run: cmake --preset x86-release
+
+      - name: Build (dist SNP)
+        shell: pwsh
+        run: cmake --build out/build/x86-release --target crownlink_dist
+
+      - name: Collect artifact
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path out/artifacts | Out-Null
+          Get-ChildItem -Recurse -Include CrownLink.snp,SNP.dll | ForEach-Object {
+            Write-Host $_.FullName $_.Length
+            Copy-Item $_.FullName out/artifacts/
+          }
+          Get-ChildItem out/artifacts | Format-Table Name,Length
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CrownLink-snp
+          path: out/artifacts/*
+          if-no-files-found: warn
