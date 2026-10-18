@@ -63,6 +63,11 @@ public:
     void send_custom_packet(JuiceAgentType agent_type, GamePacketSubType sub_type, const char* data, size_t data_size);
     void update_quality(bool resend_requested);
 
+    /// Sends a rollback-channel packet to this peer (ADR-0001 §2.1). `redundant` sends over
+    /// both the direct P2P and the relay agent when both are connected (for the
+    /// reliability-critical messages); otherwise it uses the pair's best agent.
+    void send_rollback(const char* data, size_t size, bool redundant);
+
     bool is_active();
     const NetAddress& address() const { return m_address; }
 
@@ -132,6 +137,10 @@ public:
     void disconnect_if_inactive(const NetAddress& address);
     bool send_p2p(const NetAddress& address, const char* data, size_t size);
     void send_all(const char* data, size_t size);
+
+    /// Sends a rollback-channel packet to every peer (ADR-0001 §2.1). See
+    /// `AgentPair::send_rollback` for the `redundant` choice.
+    void send_rollback(const char* data, size_t size, bool redundant);
     void send_connection_request(const NetAddress& address);
     void set_ice_credentials(const CrownLinkProtocol::IceCredentials& ice_credentials);
 

@@ -5,6 +5,7 @@
 #include "CrowServeManager.h"
 #include "Globals.h"
 #include "Logger.h"
+#include "RollbackChannel.h"
 #include "SNPModule.h"
 
 BOOL WINAPI SnpQuery(
@@ -110,6 +111,41 @@ static void dll_start() {
 
     juice_set_log_handler(juice_logger);
     juice_set_log_level(JUICE_LOG_LEVEL_INFO);
+}
+
+// ---------------------------------------------------------------------------------------
+// cosmo-rollback transport channel (ADR-0001 §2.1).
+//
+// The rollback DLL resolves these by GetProcAddress on the bound CrownLink.snp. Two
+// deliberate deviations from the ADR's sketched API, both because CrownLink's peer identity
+// is `NetAddress` and it has no storm-slot table:
+//   * the receive callback gets the sender's `NetAddress`, not a storm slot id, and
+//   * there is no per-slot send — v1 is 1v1, so a broadcast reaches exactly the one peer.
+// Both are recorded in RollbackChannel.h.
+// ---------------------------------------------------------------------------------------
+
+u32 WINAPI cl_rollback_abi() {
+    return 1;
+}
+
+void WINAPI cl_rollback_set_receive_cb(RollbackReceiveCallback callback) {
+    g_rollback_receive_callback = callback;
+}
+
+BOOL WINAPI cl_rollback_broadcast(const char* data, u32 size) {
+    if (!g_context || !data || !size) {
+        return false;
+    }
+    g_context->juice_manager().send_rollback(data, size, false);
+    return true;
+}
+
+BOOL WINAPI cl_rollback_send_redundant(const char* data, u32 size) {
+    if (!g_context || !data || !size) {
+        return false;
+    }
+    g_context->juice_manager().send_rollback(data, size, true);
+    return true;
 }
 
 static void dll_exit() {

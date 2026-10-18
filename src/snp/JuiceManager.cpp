@@ -1,4 +1,5 @@
 #include "JuiceManager.h"
+#include "RollbackChannel.h"
 
 AgentPair::AgentPair(const NetAddress& address, CrownLinkProtocol::IceCredentials& ice_credentials) {
     m_p2p_agent = std::make_unique<JuiceAgent>(*this, address, ice_credentials, JuiceAgentType::P2P);
@@ -133,6 +134,27 @@ void AgentPair::send_custom_packet(JuiceAgentType agent_type, GamePacketSubType 
     }
 }
 
+void AgentPair::send_rollback(const char* data, size_t size, bool redundant) {
+    if (redundant) {
+        // Reliability-critical: duplicate over the direct P2P link and the relay, exactly
+        // what CrownLink's own AdaptiveRedundant strategy does for its critical packets.
+        if (m_p2p_agent && m_p2p_agent->connected()) {
+            m_p2p_agent->send_custom_message(GamePacketSubTypeRollback, data, size);
+        }
+        if (m_relay_agent && m_relay_agent->connected()) {
+            m_relay_agent->send_custom_message(GamePacketSubTypeRollback, data, size);
+        }
+        return;
+    }
+
+    // Fire-and-forget: one copy over whichever agent the pair considers best. Loss is
+    // absorbed by rollback prediction.
+    auto& best = get_best();
+    if (best && best->connected()) {
+        best->send_custom_message(GamePacketSubTypeRollback, data, size);
+    }
+}
+
 void AgentPair::update_quality(bool resend_requested) {
     if (resend_requested) {
         m_average_quality.update(0.0f);
@@ -261,6 +283,16 @@ void JuiceManager::send_all(const char* data, const size_t size) {
     for (auto& [name, agent] : m_agents) {
         spdlog::debug("Sending message peer {} with status: {}\n", agent->address(), to_string(agent->best_agent_state()));
         agent->send_p2p(data, size);
+    }
+}
+
+void JuiceManager::send_rollback(const char* data, size_t size, bool redundant) {
+    std::lock_guard lock{m_mutex};
+    for (auto& [address, agent] : m_agents) {
+        if (!agent->is_active()) {
+            continue;
+        }
+        agent->send_rollback(data, size, redundant);
     }
 }
 

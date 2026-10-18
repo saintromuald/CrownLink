@@ -11,3 +11,7 @@ EXPORTS
   set_status_lobby          @10
   set_map_name_edit         @11
   iterate_lobbies           @12
+  cl_rollback_abi           @13
+  cl_rollback_set_receive_cb @14
+  cl_rollback_broadcast     @15
+  cl_rollback_send_redundant @16

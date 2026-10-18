@@ -9,6 +9,7 @@
     "snp/JuiceAgent.cpp"
     "snp/JuiceManager.h"
     "snp/JuiceManager.cpp"
+    "snp/RollbackChannel.h"
     "snp/Config.h"
     "snp/CrowServeManager.cpp"
     "snp/CrowServeManager.h"
