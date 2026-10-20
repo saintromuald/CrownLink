@@ -277,7 +277,12 @@ void JuiceAgent::on_recv(juice_agent_t* agent, const char* data, size_t size, vo
 
     // cosmo-rollback channel: hand the payload to the DLL and stop, so it never reaches the
     // engine's lockstep receive queue (ADR-0001 §2.1).
-    if (header.sub_type == GamePacketSubTypeRollback) {
+    //
+    // The sub-type is only meaningful inside a CrownLink-typed packet. Storm's own `Sys`
+    // packets also carry sub-type value 15 — the engine sends `tp:Sys st:15` throughout the
+    // multiplayer join handshake — so matching the sub-type alone swallows real engine
+    // traffic and makes every CrownLink join time out.
+    if (header.type == GamePacketType::CrownLink && header.sub_type == GamePacketSubTypeRollback) {
         auto callback = g_rollback_receive_callback;
         if (callback) {
             callback(&parent.m_address, packet.data.payload, (u32)header.size);
