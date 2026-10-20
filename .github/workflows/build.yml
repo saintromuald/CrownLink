@@ -45,11 +45,17 @@ jobs:
       - name: Collect artifact
         shell: pwsh
         run: |
+          # Collect the *dist* SNP (dll + caps.mpq appended), not the bare linker output:
+          # without the caps archive Storm cannot enumerate the provider, so the game never
+          # lists CrownLink. Both files are named CrownLink.snp, so a recursive copy raced
+          # and shipped the caps-less one.
           New-Item -ItemType Directory -Force -Path out/artifacts | Out-Null
-          Get-ChildItem -Recurse -Include CrownLink.snp,SNP.dll | ForEach-Object {
-            Write-Host $_.FullName $_.Length
-            Copy-Item $_.FullName out/artifacts/
-          }
+          $dist = "out/build/x86-release/dist/CrownLink.snp"
+          if (-not (Test-Path $dist)) { throw "missing $dist (crownlink_dist target did not run)" }
+          Copy-Item $dist out/artifacts/
+          $bytes = [System.IO.File]::ReadAllBytes($dist)
+          $header = [System.Text.Encoding]::ASCII.GetString($bytes, 0, $bytes.Length)
+          if (-not $header.Contains("MPQ" + [char]0x1a)) { throw "dist SNP has no caps.mpq appended" }
           Get-ChildItem out/artifacts | Format-Table Name,Length
 
       - uses: actions/upload-artifact@v4
