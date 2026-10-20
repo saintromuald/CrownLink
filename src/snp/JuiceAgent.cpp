@@ -267,25 +267,26 @@ void JuiceAgent::on_recv(juice_agent_t* agent, const char* data, size_t size, vo
     auto packet = make_game_packet(parent.m_address, data, size);
     auto& header = packet.data.header;
     if (header.type == GamePacketType::CrownLink) {
+        // cosmo-rollback channel: hand the payload to the DLL and stop, so it never reaches
+        // the engine's lockstep receive queue (ADR-0001 §2.1).
+        //
+        // This must be tested *inside* the CrownLink branch: every CrownLink-typed packet is
+        // consumed here (that is how Ping/PingResponse stay private), so a check placed
+        // after the branch can never fire. The sub-type test alone is not enough either —
+        // Storm's own `Sys` packets also use sub-type 15 during the join handshake.
+        if (header.sub_type == GamePacketSubTypeRollback) {
+            if (auto callback = g_rollback_receive_callback) {
+                callback(
+                    &parent.m_address, packet.data.payload,
+                    (u32)(header.size - sizeof(GamePacketHeader))
+                );
+            }
+            return;
+        }
         if (header.sub_type == GamePacketSubType::Ping) {
             parent.handle_ping(packet);
         } else if (header.sub_type == GamePacketSubType::PingResponse) {
             parent.handle_ping_response(packet);
-        }
-        return;
-    }
-
-    // cosmo-rollback channel: hand the payload to the DLL and stop, so it never reaches the
-    // engine's lockstep receive queue (ADR-0001 §2.1).
-    //
-    // The sub-type is only meaningful inside a CrownLink-typed packet. Storm's own `Sys`
-    // packets also carry sub-type value 15 — the engine sends `tp:Sys st:15` throughout the
-    // multiplayer join handshake — so matching the sub-type alone swallows real engine
-    // traffic and makes every CrownLink join time out.
-    if (header.type == GamePacketType::CrownLink && header.sub_type == GamePacketSubTypeRollback) {
-        auto callback = g_rollback_receive_callback;
-        if (callback) {
-            callback(&parent.m_address, packet.data.payload, (u32)header.size);
         }
         return;
     }
